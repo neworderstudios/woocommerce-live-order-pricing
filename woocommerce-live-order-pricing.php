@@ -288,12 +288,4 @@ class wcLivePricing {
 
 		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) die();
 	}
-
-	/**
-	 * AJAX action for retrieving a customer's budget and discount details.
-	 */
-	function load_budgets() {
-		
-		die();
-	}
 }
