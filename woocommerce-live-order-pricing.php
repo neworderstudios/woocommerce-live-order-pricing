@@ -220,7 +220,7 @@ class wcLivePricing {
 			</tr>
 			<tr>
 				<td width="50%" align="left" style="padding-top:7px;">% <?php echo __( 'Discount', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcDiscount" data-amount="<?php echo $discount; ?>" style="padding-top:7px;"><?php echo $this->c . number_format( $discount * 100, 2 ); ?></td>
+				<td width="50%" align="right" id="wcBcDiscount" data-amount="<?php echo $discount; ?>" style="padding-top:7px;"><?php echo number_format( $discount * 100, 2 ); ?></td>
 			</tr>
 			<tr>
 				<td colspan="2" style="border-bottom:2px solid #eee;padding-top:7px;"></td>
