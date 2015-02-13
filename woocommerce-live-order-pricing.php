@@ -17,7 +17,7 @@ class wcLivePricing {
 	public function __construct() {
 		load_plugin_textdomain( 'woocommerce-live-order-pricing', false, basename( dirname(__FILE__) ) . '/i18n' );
 		add_action( 'add_meta_boxes', array( $this, 'add_metabox' ) );
-		add_action( 'wp_ajax_load_order_budgets', array( $this, 'load_budgets' ) );
+		add_action( 'wp_ajax_load_order_budgets', array( $this, 'render_pricing_meta_box' ) );
 
 		$this->add_cust_fields();
 	}
@@ -26,8 +26,6 @@ class wcLivePricing {
 	 * Let's add the pricing metabox.
 	 */
 	public function add_metabox( $post_type ) {
-		$this->c = get_woocommerce_currency_symbol();
-
 		if ( $post_type == 'shop_order' ) {
 
 			add_meta_box(
@@ -48,11 +46,11 @@ class wcLivePricing {
 
 			register_field_group(array (
 				'key' => 'group_54dde380bc3f0',
-				'title' => 'Customer Budgets & Tax Details',
+				'title' => __( 'Customer Budgets & Tax Details', 'woocommerce-live-order-pricing' ),
 				'fields' => array (
 					array (
 						'key' => 'field_54ddf46bc10b7',
-						'label' => 'Budgets',
+						'label' => __( 'Budgets', 'woocommerce-live-order-pricing' ),
 						'name' => 'customer_budgets',
 						'prefix' => '',
 						'type' => 'repeater',
@@ -67,15 +65,15 @@ class wcLivePricing {
 						'min' => '1',
 						'max' => '',
 						'layout' => 'row',
-						'button_label' => 'Add Budget',
+						'button_label' => __( 'Add Budget', 'woocommerce-live-order-pricing' ),
 						'sub_fields' => array (
 							array (
 								'key' => 'field_54ddf4a4c10b8',
-								'label' => 'Budget name',
+								'label' => __( 'Budget name', 'woocommerce-live-order-pricing' ),
 								'name' => 'budget_name',
 								'prefix' => '',
 								'type' => 'text',
-								'instructions' => 'Provide a name to identify this budget.',
+								'instructions' => __( 'Provide a name to identify this budget.', 'woocommerce-live-order-pricing' ),
 								'required' => 0,
 								'conditional_logic' => 0,
 								'wrapper' => array (
@@ -93,7 +91,7 @@ class wcLivePricing {
 							),
 							array (
 								'key' => 'field_54ddf4bec10b9',
-								'label' => 'Budget amount',
+								'label' => __( 'Budget amount', 'woocommerce-live-order-pricing' ),
 								'name' => 'budget_amount',
 								'prefix' => '',
 								'type' => 'number',
@@ -119,11 +117,11 @@ class wcLivePricing {
 					),
 					array (
 						'key' => 'field_54ddf58c98df1',
-						'label' => 'Discount (%)',
+						'label' => __( 'Discount (%)', 'woocommerce-live-order-pricing' ),
 						'name' => 'customer_discount',
 						'prefix' => '',
 						'type' => 'number',
-						'instructions' => 'Specify a regular discount for this user.',
+						'instructions' => __( 'Specify a regular discount for this user.', 'woocommerce-live-order-pricing' ),
 						'required' => 0,
 						'conditional_logic' => 0,
 						'wrapper' => array (
@@ -143,11 +141,11 @@ class wcLivePricing {
 					),
 					array (
 						'key' => 'field_54ddf56c98df0',
-						'label' => 'VAT ID',
+						'label' => __( 'VAT ID', 'woocommerce-live-order-pricing' ),
 						'name' => 'customer_vat_id',
 						'prefix' => '',
 						'type' => 'text',
-						'instructions' => 'Provide the customer\'s VAT ID if applicable.',
+						'instructions' => __( 'Provide the customer\'s VAT ID if applicable.', 'woocommerce-live-order-pricing' ),
 						'required' => 0,
 						'conditional_logic' => 0,
 						'wrapper' => array (
@@ -189,17 +187,21 @@ class wcLivePricing {
 	 *
 	 * @param WP_Post $post The post object.
 	 */
-	public function render_pricing_meta_box( $post ) {
+	public function render_pricing_meta_box( $post = NULL ) {
 
-		$order = new WC_Order( $post->ID );
+		$this->c = get_woocommerce_currency_symbol();
+		$pid = $post ? $post->ID : $_REQUEST['post_ID'];
+		$order = new WC_Order( $pid );
 		$user = $order->get_user();
 		$ini_total = $subtotal = $order->get_subtotal();
 		$budgets = array();
 		$discount = $budget = 0;
 
-		if ( $user ) {
-			$budgets = get_field( 'customer_budgets', $user->ID );
-			$discount = get_field( 'customer_discount', $user->ID ) / 100;
+		$uid = $user ? $user->ID : @$_REQUEST['user_ID'];
+
+		if ( $uid ) {
+			$budgets = get_field( 'customer_budgets', "user_{$uid}" );
+			$discount = get_field( 'customer_discount', "user_{$uid}" ) / 100;
 			$subtotal = ($ini_total - ($ini_total * $discount));
 		}
 
@@ -214,29 +216,29 @@ class wcLivePricing {
 		<table cellpadding="0" cellspacing="0" width="100%">
 			<tr>
 				<td width="50%" align="left"><?php echo __( 'Current Basket', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcBasket"><?php echo $this->c . $ini_total; ?><span id="wc_lp_curtotal"></span></td>
+				<td width="50%" align="right" id="wcBcBasket" data-amount="<?php echo $ini_total; ?>"><?php echo $this->c . number_format( $ini_total, 2 ); ?><span id="wc_lp_curtotal"></span></td>
 			</tr>
 			<tr>
 				<td width="50%" align="left" style="padding-top:7px;">% <?php echo __( 'Discount', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcDiscount" style="padding-top:7px;"><?php echo $this->c . $discount; ?></td>
+				<td width="50%" align="right" id="wcBcDiscount" data-amount="<?php echo $discount; ?>" style="padding-top:7px;"><?php echo $this->c . number_format( $discount * 100, 2 ); ?></td>
 			</tr>
 			<tr>
 				<td colspan="2" style="border-bottom:2px solid #eee;padding-top:7px;"></td>
 			</tr>
 			<tr>
 				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Subtotal', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcDiscount" style="padding-top:7px;"><?php echo $this->c . $subtotal; ?></td>
+				<td width="50%" align="right" id="wcBcSubtotal" style="padding-top:7px;"><?php echo $this->c . number_format( $subtotal, 2 ); ?></td>
 			</tr>
 			<tr>
 				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Budget', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcBudget" style="padding-top:7px;"><?php echo $this->c . '0'; ?></td>
+				<td width="50%" align="right" id="wcBcBudget" style="padding-top:7px;"><?php echo $this->c . '0.00'; ?></td>
 			</tr>
 			<tr>
 				<td colspan="2" style="border-bottom:2px solid #eee;padding-top:7px;"></td>
 			</tr>
 			<tr>
 				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Balance', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcBalance" style="padding-top:7px;color:#ff0000;"><?php echo '+' . $this->c . $subtotal; ?></td>
+				<td width="50%" align="right" id="wcBcBalance" style="padding-top:7px;color:#ff0000;"><?php echo '+' . $this->c . number_format( $subtotal, 2); ?></td>
 			</tr>
 		</table>
 
@@ -244,32 +246,47 @@ class wcLivePricing {
 		jQuery('document').ready(function($){
 
 			function selectCustomerBudget(){
-
+				amt = parseFloat($('#customerBudgetAmt').val() ? $('#customerBudgetAmt').val() : 0);
+				discounted = $('#wcBcBasket').data('amount') - ($('#wcBcDiscount').data('amount') * $('#wcBcBasket').data('amount'));
+				balance = amt - discounted;
+				$('#wcBcBudget').html('<?php echo $this->c; ?>' + amt.toFixed(2));
+				$('#wcBcSubtotal').html('<?php echo $this->c; ?>' + discounted.toFixed(2));
+				$('#wcBcBalance').html((balance < 0 ? '+' : '-') + '<?php echo $this->c; ?>' + Math.abs(balance).toFixed(2));
+				$('#wcBcBalance').css('color',balance < 0 ? '#ff0000' : '#66cd00');
 			}
 
-			function setCustomerBudgets(){
-
-			}
-
-			function updateBudgetSubtotal(){
-
+			function setCustomerBudgets(id){
+				$('#order_live_pricing .inside')
+					.html('<p style="padding:10px;text-align:center;"><img src="images/loading.gif" /></p>')
+					.load(ajaxurl + '?action=load_order_budgets',{user_ID:id,post_ID:<?php echo $pid; ?>});
 			}
 
 			function updateBudgetBasket(){
-
+				var total = 0;
+				$('.line_cost .amount').each(function(){
+					total += parseFloat($(this).text().substr(1));
+				});
+				$('#wcBcBasket').html('<?php echo $this->c; ?>' + total.toFixed(2)).data('amount',total);
+				selectCustomerBudget();
 			}
 
 			$('#customerBudgetAmt').change(function(){
-				selectCustomerBudget($(this).val());
+				selectCustomerBudget();
 			});
 
 			$('#customer_user').change(function(){
 				setCustomerBudgets($(this).val());
 			});
 
+			$(document).ajaxComplete(function(){
+				setTimeout(function(){ updateBudgetBasket(); },1);
+			});
+
 		});
 		</script>
 		<?php
+
+		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) die();
 	}
 
 	/**
