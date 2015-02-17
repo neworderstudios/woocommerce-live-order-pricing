@@ -264,7 +264,7 @@ class wcLivePricing {
 			function updateBudgetBasket(){
 				var total = 0;
 				$('.line_cost .amount').each(function(){
-					total += parseFloat($(this).text().replace('<?php echo $this->c; ?>',''));
+					total += parseFloat($(this).text().replace('<?php echo html_entity_decode($this->c); ?>',''));
 				});
 				$('#wcBcBasket').html('<?php echo $this->c; ?>' + total.toFixed(2)).data('amount',total);
 				selectCustomerBudget();
