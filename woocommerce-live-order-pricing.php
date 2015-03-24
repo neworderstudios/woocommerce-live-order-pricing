@@ -161,6 +161,28 @@ class wcLivePricing {
 						'readonly' => 0,
 						'disabled' => 0,
 					),
+					array (
+						'key' => 'field_54ddf56c98df0_cid',
+						'label' => __( 'Customer ID', 'woocommerce-live-order-pricing' ),
+						'name' => 'customer_internal_id',
+						'prefix' => '',
+						'type' => 'text',
+						'instructions' => __( 'Optionally specify an internal ID code for this customer.', 'woocommerce-live-order-pricing' ),
+						'required' => 0,
+						'conditional_logic' => 0,
+						'wrapper' => array (
+							'width' => '',
+							'class' => '',
+							'id' => '',
+						),
+						'default_value' => '',
+						'placeholder' => '',
+						'prepend' => '',
+						'append' => '',
+						'maxlength' => '',
+						'readonly' => 0,
+						'disabled' => 0,
+					),
 				),
 				'location' => array (
 					array (
