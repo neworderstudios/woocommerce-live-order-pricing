@@ -2,7 +2,7 @@
 /*----------------------------------------------------------------------------------------------------------------------
 Plugin Name: WooCommerce Live Order Pricing
 Description: Displays realtime price changes and customer budgets on the admin order screen.
-Version: 1.0.0
+Version: 1.1.0
 Author: New Order Studios
 Author URI: https://github.com/neworderstudios
 ----------------------------------------------------------------------------------------------------------------------*/
@@ -212,6 +212,9 @@ class wcLivePricing {
 	public function render_pricing_meta_box( $post = NULL ) {
 
 		$this->c = get_woocommerce_currency_symbol();
+		$dec = wc_get_price_decimal_separator();
+		$tho = wc_get_price_thousand_separator();
+
 		$pid = $post ? $post->ID : $_REQUEST['post_ID'];
 		$order = new WC_Order( $pid );
 		$user = $order->get_user();
@@ -265,15 +268,25 @@ class wcLivePricing {
 		</table>
 
 		<script type="text/javascript">
+		function rmCurFormat(v){
+			var symbols = {'<?php echo $dec; ?>':'.','<?php echo $tho; ?>':','};
+			return v.replace(/<?php echo ($dec == '.' ? '\\' : '') . $dec; ?>|<?php echo ($tho == '.' ? '\\' : '') . $tho; ?>/gi, function(matched){ return symbols[matched]; });
+		}
+
+		function addCurFormat(v){
+			var symbols = {'.':'<?php echo $dec; ?>',',':'<?php echo $tho; ?>'};
+			return v.replace(/\.|,/gi, function(matched){ return symbols[matched]; });
+		}
+
 		jQuery('document').ready(function($){
 
 			function selectCustomerBudget(){
 				amt = parseFloat($('#customerBudgetAmt').val() ? $('#customerBudgetAmt').val() : 0);
 				discounted = $('#wcBcBasket').data('amount') - ($('#wcBcDiscount').data('amount') * $('#wcBcBasket').data('amount'));
 				balance = amt - discounted;
-				$('#wcBcBudget').html('<?php echo $this->c; ?>' + amt.toFixed(2));
-				$('#wcBcSubtotal').html('<?php echo $this->c; ?>' + discounted.toFixed(2));
-				$('#wcBcBalance').html((balance < 0 ? '+' : '-') + '<?php echo $this->c; ?>' + Math.abs(balance).toFixed(2));
+				$('#wcBcBudget').html('<?php echo $this->c; ?>' + addCurFormat(amt.toFixed(2)));
+				$('#wcBcSubtotal').html('<?php echo $this->c; ?>' + addCurFormat(discounted.toFixed(2)));
+				$('#wcBcBalance').html((balance < 0 ? '+' : '-') + '<?php echo $this->c; ?>' + addCurFormat(Math.abs(balance).toFixed(2)));
 				$('#wcBcBalance').css('color',balance < 0 ? '#ff0000' : '#66cd00');
 			}
 
@@ -285,10 +298,11 @@ class wcLivePricing {
 
 			function updateBudgetBasket(){
 				var total = 0;
-				$('.line_cost .amount').each(function(){
-					total += parseFloat($(this).text().replace('<?php echo html_entity_decode($this->c); ?>',''));
+				$('.line_cost .line_total').each(function(){
+					lineTotal = $(this).val() || 0;
+					total += parseFloat(rmCurFormat(lineTotal.replace('&nbsp','').replace('<?php echo html_entity_decode($this->c); ?>','')));
 				});
-				$('#wcBcBasket').html('<?php echo $this->c; ?>' + total.toFixed(2)).data('amount',total);
+				$('#wcBcBasket').html('<?php echo $this->c; ?>' + addCurFormat(total.toFixed(2))).data('amount',total);
 				selectCustomerBudget();
 			}
 
