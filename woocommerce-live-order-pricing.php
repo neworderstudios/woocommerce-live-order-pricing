@@ -2,7 +2,7 @@
 /*----------------------------------------------------------------------------------------------------------------------
 Plugin Name: WooCommerce Live Order Pricing
 Description: Displays realtime price changes and customer budgets on the admin order screen.
-Version: 1.1.0
+Version: 1.2.0
 Author: New Order Studios
 Author URI: https://github.com/neworderstudios
 ----------------------------------------------------------------------------------------------------------------------*/
@@ -236,7 +236,6 @@ class wcLivePricing {
 			<?php foreach($budgets as $budget){ ?>
 				<option value="<?php echo $budget['budget_amount']; ?>"><?php echo $budget['budget_name']; ?></option>
 			<?php } ?>
-
 		</select>
 		<table cellpadding="0" cellspacing="0" width="100%">
 			<tr>
@@ -244,8 +243,8 @@ class wcLivePricing {
 				<td width="50%" align="right" id="wcBcBasket" data-amount="<?php echo $ini_total; ?>"><?php echo $this->c . number_format( $ini_total, 2 ); ?><span id="wc_lp_curtotal"></span></td>
 			</tr>
 			<tr>
-				<td width="50%" align="left" style="padding-top:7px;">% <?php echo __( 'Discount', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcDiscount" data-amount="<?php echo $discount; ?>" style="padding-top:7px;"><?php echo number_format( $discount * 100, 2 ); ?></td>
+				<td width="50%" align="left" style="padding-top:7px;"><?php echo number_format( $discount * 100, 2 ); ?>% <?php echo __( 'Discount', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
+				<td width="50%" align="right" id="wcBcDiscount" data-amount="<?php echo $discount; ?>" style="padding-top:7px;"><?php echo $this->c . number_format( $discount * $ini_total, 2 ); ?></td>
 			</tr>
 			<tr>
 				<td colspan="2" style="border-bottom:2px solid #eee;padding-top:7px;"></td>
@@ -282,12 +281,16 @@ class wcLivePricing {
 
 			function selectCustomerBudget(){
 				amt = parseFloat($('#customerBudgetAmt').val() ? $('#customerBudgetAmt').val() : 0);
-				discounted = $('#wcBcBasket').data('amount') - ($('#wcBcDiscount').data('amount') * $('#wcBcBasket').data('amount'));
+				discount = $('#wcBcDiscount').data('amount') * $('#wcBcBasket').data('amount');
+				discounted = $('#wcBcBasket').data('amount') - discount;
 				balance = amt - discounted;
 				$('#wcBcBudget').html('<?php echo $this->c; ?>' + addCurFormat(amt.toFixed(2)));
 				$('#wcBcSubtotal').html('<?php echo $this->c; ?>' + addCurFormat(discounted.toFixed(2)));
 				$('#wcBcBalance').html((balance < 0 ? '+' : '-') + '<?php echo $this->c; ?>' + addCurFormat(Math.abs(balance).toFixed(2)));
 				$('#wcBcBalance').css('color',balance < 0 ? '#ff0000' : '#66cd00');
+
+				// Update discount amount
+				$('#wcBcDiscount').html('<?php echo $this->c; ?>' + addCurFormat(Math.abs(discount).toFixed(2)));
 			}
 
 			function setCustomerBudgets(id){
