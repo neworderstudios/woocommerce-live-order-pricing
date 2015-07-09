@@ -2,7 +2,7 @@
 /*----------------------------------------------------------------------------------------------------------------------
 Plugin Name: WooCommerce Live Order Pricing
 Description: Displays realtime price changes and customer budgets on the admin order screen.
-Version: 1.2.0
+Version: 1.3.0
 Author: New Order Studios
 Author URI: https://github.com/neworderstudios
 ----------------------------------------------------------------------------------------------------------------------*/
@@ -18,12 +18,15 @@ class wcLivePricing {
 		load_plugin_textdomain( 'woocommerce-live-order-pricing', false, basename( dirname(__FILE__) ) . '/i18n' );
 		add_action( 'add_meta_boxes', array( $this, 'add_metabox' ) );
 		add_action( 'wp_ajax_load_order_budgets', array( $this, 'render_pricing_meta_box' ) );
+		add_action( 'woocommerce_order_item_add_action_buttons', array( $this, 'add_apply_discount_button' ), 10, 1 );
 
 		$this->add_cust_fields();
 	}
 
 	/**
 	 * Let's add the pricing metabox.
+	 *
+	 * @param string $post_type
 	 */
 	public function add_metabox( $post_type ) {
 		if ( $post_type == 'shop_order' ) {
@@ -38,6 +41,185 @@ class wcLivePricing {
 			);
 		
 		}
+	}
+
+	/**
+	 * We'd like to add a discount button on the item list actions toolbar.
+	 *
+	 * @param WC_Order $order An order object.
+	 */
+	public function add_apply_discount_button ( $order = NULL ) {
+
+		$discount = get_field( 'customer_discount', "user_{$order->get_user_id()}" );
+		if ( $order->is_editable() && $discount > 0 ) {
+			?>
+			<button type="button" class="button button-primary calculate-discount-action" data-discount="<?php echo $discount; ?>">
+				<?php _e( 'Rabatt auf Bestellung anwenden:', 'woocommerce' ); ?>
+				<?php echo $discount . '%'; ?>
+			</button>
+			<?php
+
+			wc_enqueue_js( $this->ajax_logic() );
+		}
+
+	}
+
+	/**
+	 * AJAX logic for discount processing.
+	 */
+	private function ajax_logic() {
+
+		$dec = wc_get_price_decimal_separator();
+		$tho = wc_get_price_thousand_separator();
+		?>
+
+		<script type="text/javascript">
+		jQuery( document ).ready( function( $ ){
+			$( '.calculate-discount-action' ).click( function() {
+
+				var discount = $( this ).data( 'discount' ) / 100;
+				var symbols = {'.':'<?php echo $dec; ?>',',':'<?php echo $tho; ?>'};
+
+				$( '.line_total' ).each( function() {
+					var line_total = $( this ).parents( 'td' ).data( 'sort-value' );
+					if ( !line_total || $( this ).val() != $( this ).next().val() ) return;
+
+					var discounted_total = line_total - ( line_total * discount );
+					$( this ).val( discounted_total.toString().replace( /\.|,/gi, function( matched ){ return symbols[matched]; } ) );
+				} );
+
+				$( '.wc-order-add-item .save-action' ).click();
+
+			} );
+		} );
+		</script>
+
+		<?php
+
+	}
+
+	/**
+	 * Let's render the pricing box.
+	 *
+	 * @param WP_Post $post The post object.
+	 */
+	public function render_pricing_meta_box( $post = NULL ) {
+
+		$this->c = get_woocommerce_currency_symbol();
+		$dec = wc_get_price_decimal_separator();
+		$tho = wc_get_price_thousand_separator();
+
+		$pid = $post ? $post->ID : $_REQUEST['post_ID'];
+		$order = new WC_Order( $pid );
+		$user = $order->get_user();
+		$ini_total = $subtotal = $order->get_subtotal();
+		$budgets = array();
+		$discount = $budget = 0;
+
+		$uid = $user ? $user->ID : @$_REQUEST['user_ID'];
+
+		if ( $uid ) {
+			$budgets = get_field( 'customer_budgets', "user_{$uid}" );
+			$discount = get_field( 'customer_discount', "user_{$uid}" ) / 100;
+			$subtotal = ($ini_total - ($ini_total * $discount));
+		}
+
+		?>
+		<select style="width:100%;margin-bottom:10px;" id="customerBudgetAmt" <?php echo (!$budgets ? 'disabled' : ''); ?>>
+			<option value=""><?php echo __( $budgets ? 'Select a customer budget' : 'No budgets for this customer.', 'woocommerce-live-order-pricing' ); ?></option>
+			<?php foreach($budgets as $budget){ ?>
+				<option value="<?php echo $budget['budget_amount']; ?>"><?php echo $budget['budget_name']; ?></option>
+			<?php } ?>
+		</select>
+		<table cellpadding="0" cellspacing="0" width="100%">
+			<tr>
+				<td width="50%" align="left"><?php echo __( 'Current Basket', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
+				<td width="50%" align="right" id="wcBcBasket" data-amount="<?php echo $ini_total; ?>"><?php echo $this->c . number_format( $ini_total, 2 ); ?><span id="wc_lp_curtotal"></span></td>
+			</tr>
+			<tr>
+				<td width="50%" align="left" style="padding-top:7px;"><?php echo number_format( $discount * 100, 2 ); ?>% <?php echo __( 'Discount', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
+				<td width="50%" align="right" id="wcBcDiscount" data-amount="<?php echo $discount; ?>" style="padding-top:7px;"><?php echo $this->c . number_format( $discount * $ini_total, 2 ); ?></td>
+			</tr>
+			<tr>
+				<td colspan="2" style="border-bottom:2px solid #eee;padding-top:7px;"></td>
+			</tr>
+			<tr>
+				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Subtotal', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
+				<td width="50%" align="right" id="wcBcSubtotal" style="padding-top:7px;"><?php echo $this->c . number_format( $subtotal, 2 ); ?></td>
+			</tr>
+			<tr>
+				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Budget', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
+				<td width="50%" align="right" id="wcBcBudget" style="padding-top:7px;"><?php echo $this->c . '0.00'; ?></td>
+			</tr>
+			<tr>
+				<td colspan="2" style="border-bottom:2px solid #eee;padding-top:7px;"></td>
+			</tr>
+			<tr>
+				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Balance', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
+				<td width="50%" align="right" id="wcBcBalance" style="padding-top:7px;color:#ff0000;"><?php echo '+' . $this->c . number_format( $subtotal, 2); ?></td>
+			</tr>
+		</table>
+
+		<script type="text/javascript">
+		function rmCurFormat(v){
+			var symbols = {'<?php echo $dec; ?>':'.','<?php echo $tho; ?>':','};
+			return v.replace(/<?php echo ($dec == '.' ? '\\' : '') . $dec; ?>|<?php echo ($tho == '.' ? '\\' : '') . $tho; ?>/gi, function(matched){ return symbols[matched]; });
+		}
+
+		function addCurFormat(v){
+			var symbols = {'.':'<?php echo $dec; ?>',',':'<?php echo $tho; ?>'};
+			return v.replace(/\.|,/gi, function(matched){ return symbols[matched]; });
+		}
+
+		jQuery('document').ready(function($){
+
+			function selectCustomerBudget(){
+				amt = parseFloat($('#customerBudgetAmt').val() ? $('#customerBudgetAmt').val() : 0);
+				discount = $('#wcBcDiscount').data('amount') * $('#wcBcBasket').data('amount');
+				discounted = $('#wcBcBasket').data('amount') - discount;
+				balance = amt - discounted;
+				$('#wcBcBudget').html('<?php echo $this->c; ?>' + addCurFormat(amt.toFixed(2)));
+				$('#wcBcSubtotal').html('<?php echo $this->c; ?>' + addCurFormat(discounted.toFixed(2)));
+				$('#wcBcBalance').html((balance < 0 ? '+' : '-') + '<?php echo $this->c; ?>' + addCurFormat(Math.abs(balance).toFixed(2)));
+				$('#wcBcBalance').css('color',balance < 0 ? '#ff0000' : '#66cd00');
+
+				// Update discount amount
+				$('#wcBcDiscount').html('<?php echo $this->c; ?>' + addCurFormat(Math.abs(discount).toFixed(2)));
+			}
+
+			function setCustomerBudgets(id){
+				$('#order_live_pricing .inside')
+					.html('<p style="padding:10px;text-align:center;"><img src="images/loading.gif" /></p>')
+					.load(ajaxurl + '?action=load_order_budgets',{user_ID:id,post_ID:<?php echo $pid; ?>});
+			}
+
+			function updateBudgetBasket(){
+				var total = 0;
+				$('.line_cost .line_subtotal').each(function(){
+					lineTotal = $(this).val() || 0;
+					total += parseFloat(rmCurFormat(lineTotal.replace('&nbsp','').replace('<?php echo html_entity_decode($this->c); ?>','')));
+				});
+				$('#wcBcBasket').html('<?php echo $this->c; ?>' + addCurFormat(total.toFixed(2))).data('amount',total);
+				selectCustomerBudget();
+			}
+
+			$('#customerBudgetAmt').change(function(){
+				selectCustomerBudget();
+			});
+
+			$('#customer_user').change(function(){
+				setCustomerBudgets($(this).val());
+			});
+
+			$(document).ajaxComplete(function(){
+				setTimeout(function(){ updateBudgetBasket(); },1);
+			});
+
+		});
+		</script>
+		<?php
+
+		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) die();
 	}
 
 	public function add_cust_fields () {
@@ -202,129 +384,5 @@ class wcLivePricing {
 			));
 		}
 
-	}
-
-	/**
-	 * Let's render the pricing box.
-	 *
-	 * @param WP_Post $post The post object.
-	 */
-	public function render_pricing_meta_box( $post = NULL ) {
-
-		$this->c = get_woocommerce_currency_symbol();
-		$dec = wc_get_price_decimal_separator();
-		$tho = wc_get_price_thousand_separator();
-
-		$pid = $post ? $post->ID : $_REQUEST['post_ID'];
-		$order = new WC_Order( $pid );
-		$user = $order->get_user();
-		$ini_total = $subtotal = $order->get_subtotal();
-		$budgets = array();
-		$discount = $budget = 0;
-
-		$uid = $user ? $user->ID : @$_REQUEST['user_ID'];
-
-		if ( $uid ) {
-			$budgets = get_field( 'customer_budgets', "user_{$uid}" );
-			$discount = get_field( 'customer_discount', "user_{$uid}" ) / 100;
-			$subtotal = ($ini_total - ($ini_total * $discount));
-		}
-
-		?>
-		<select style="width:100%;margin-bottom:10px;" id="customerBudgetAmt" <?php echo (!$budgets ? 'disabled' : ''); ?>>
-			<option value=""><?php echo __( $budgets ? 'Select a customer budget' : 'No budgets for this customer.', 'woocommerce-live-order-pricing' ); ?></option>
-			<?php foreach($budgets as $budget){ ?>
-				<option value="<?php echo $budget['budget_amount']; ?>"><?php echo $budget['budget_name']; ?></option>
-			<?php } ?>
-		</select>
-		<table cellpadding="0" cellspacing="0" width="100%">
-			<tr>
-				<td width="50%" align="left"><?php echo __( 'Current Basket', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcBasket" data-amount="<?php echo $ini_total; ?>"><?php echo $this->c . number_format( $ini_total, 2 ); ?><span id="wc_lp_curtotal"></span></td>
-			</tr>
-			<tr>
-				<td width="50%" align="left" style="padding-top:7px;"><?php echo number_format( $discount * 100, 2 ); ?>% <?php echo __( 'Discount', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcDiscount" data-amount="<?php echo $discount; ?>" style="padding-top:7px;"><?php echo $this->c . number_format( $discount * $ini_total, 2 ); ?></td>
-			</tr>
-			<tr>
-				<td colspan="2" style="border-bottom:2px solid #eee;padding-top:7px;"></td>
-			</tr>
-			<tr>
-				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Subtotal', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcSubtotal" style="padding-top:7px;"><?php echo $this->c . number_format( $subtotal, 2 ); ?></td>
-			</tr>
-			<tr>
-				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Budget', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcBudget" style="padding-top:7px;"><?php echo $this->c . '0.00'; ?></td>
-			</tr>
-			<tr>
-				<td colspan="2" style="border-bottom:2px solid #eee;padding-top:7px;"></td>
-			</tr>
-			<tr>
-				<td width="50%" align="left" style="padding-top:7px;"><?php echo __( 'Balance', 'woocommerce-live-order-pricing' ); ?>: &nbsp;</td>
-				<td width="50%" align="right" id="wcBcBalance" style="padding-top:7px;color:#ff0000;"><?php echo '+' . $this->c . number_format( $subtotal, 2); ?></td>
-			</tr>
-		</table>
-
-		<script type="text/javascript">
-		function rmCurFormat(v){
-			var symbols = {'<?php echo $dec; ?>':'.','<?php echo $tho; ?>':','};
-			return v.replace(/<?php echo ($dec == '.' ? '\\' : '') . $dec; ?>|<?php echo ($tho == '.' ? '\\' : '') . $tho; ?>/gi, function(matched){ return symbols[matched]; });
-		}
-
-		function addCurFormat(v){
-			var symbols = {'.':'<?php echo $dec; ?>',',':'<?php echo $tho; ?>'};
-			return v.replace(/\.|,/gi, function(matched){ return symbols[matched]; });
-		}
-
-		jQuery('document').ready(function($){
-
-			function selectCustomerBudget(){
-				amt = parseFloat($('#customerBudgetAmt').val() ? $('#customerBudgetAmt').val() : 0);
-				discount = $('#wcBcDiscount').data('amount') * $('#wcBcBasket').data('amount');
-				discounted = $('#wcBcBasket').data('amount') - discount;
-				balance = amt - discounted;
-				$('#wcBcBudget').html('<?php echo $this->c; ?>' + addCurFormat(amt.toFixed(2)));
-				$('#wcBcSubtotal').html('<?php echo $this->c; ?>' + addCurFormat(discounted.toFixed(2)));
-				$('#wcBcBalance').html((balance < 0 ? '+' : '-') + '<?php echo $this->c; ?>' + addCurFormat(Math.abs(balance).toFixed(2)));
-				$('#wcBcBalance').css('color',balance < 0 ? '#ff0000' : '#66cd00');
-
-				// Update discount amount
-				$('#wcBcDiscount').html('<?php echo $this->c; ?>' + addCurFormat(Math.abs(discount).toFixed(2)));
-			}
-
-			function setCustomerBudgets(id){
-				$('#order_live_pricing .inside')
-					.html('<p style="padding:10px;text-align:center;"><img src="images/loading.gif" /></p>')
-					.load(ajaxurl + '?action=load_order_budgets',{user_ID:id,post_ID:<?php echo $pid; ?>});
-			}
-
-			function updateBudgetBasket(){
-				var total = 0;
-				$('.line_cost .line_total').each(function(){
-					lineTotal = $(this).val() || 0;
-					total += parseFloat(rmCurFormat(lineTotal.replace('&nbsp','').replace('<?php echo html_entity_decode($this->c); ?>','')));
-				});
-				$('#wcBcBasket').html('<?php echo $this->c; ?>' + addCurFormat(total.toFixed(2))).data('amount',total);
-				selectCustomerBudget();
-			}
-
-			$('#customerBudgetAmt').change(function(){
-				selectCustomerBudget();
-			});
-
-			$('#customer_user').change(function(){
-				setCustomerBudgets($(this).val());
-			});
-
-			$(document).ajaxComplete(function(){
-				setTimeout(function(){ updateBudgetBasket(); },1);
-			});
-
-		});
-		</script>
-		<?php
-
-		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) die();
 	}
 }
